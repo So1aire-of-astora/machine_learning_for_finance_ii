@@ -29,11 +29,11 @@ def vectorized_result(j):
 
 def sigmoid(z):
     """The sigmoid function."""
-    return 1.0/(1.0+np.exp(-z))
+    return np.power(1 + np.exp(-z), -1)
 
 def sigmoid_prime(z):
     """Derivative of the sigmoid function."""
-    return sigmoid(z)*(1-sigmoid(z))
+    return sigmoid(z) * (1 - sigmoid(z))
 
 
 #### Define the quadratic and cross-entropy cost functions
@@ -51,7 +51,7 @@ class QuadraticCost(object):
     @staticmethod
     def delta(z, a, y):
         """Return the error delta from the output layer. That is, a = sigmoid(z) and you need to return dCost/dz"""
-        return (a-y) * sigmoid_prime(z)
+        return .5 * a / np.linalg.norm(a - y) ** 2 * sigmoid_prime(z)
 
 
 class CrossEntropyCost(object):
@@ -74,7 +74,7 @@ class CrossEntropyCost(object):
         Give the simplest expression you can.
 
         """
-        return (a-y)
+        return -(y/a + (1-y) / (1-a)) * sigmoid_prime(z)
 
 
 #### Main Network class
@@ -109,9 +109,12 @@ class Network(object):
         layers.
 
         """
-        self.biases = [np.random.randn(y, 1) for y in self.sizes[1:]]
-        self.weights = [np.random.randn(y, x)/np.sqrt(x)
-                        for x, y in zip(self.sizes[:-1], self.sizes[1:])]
+        self.weights, self.biases = [], []
+        for i in range(len(self.sizes) - 1):
+            size_curr, size_next = self.sizes[i], self.sizes[i + 1]
+            self.weights.append(np.random.normal(0, 1/np.sqrt(size_curr), (size_next, size_curr)))
+            self.biases.append(np.random(0, 1, size_next))
+
 
     def large_weight_initializer(self):
         """Initialize the weights using a Gaussian distribution with mean 0
@@ -129,14 +132,16 @@ class Network(object):
         instead.
 
         """
-        self.biases = [np.random.randn(y, 1) for y in self.sizes[1:]]
-        self.weights = [np.random.randn(y, x)
-                        for x, y in zip(self.sizes[:-1], self.sizes[1:])]
+        self.weights, self.biases = [], []
+        for i in range(len(self.sizes) - 1):
+            size_curr, size_next = self.sizes[i], self.sizes[i + 1]
+            self.weights.append(np.random.normal(0, 1, (size_next, size_curr)))
+            self.biases.append(np.random(0, 1, size_next))
 
     def feedforward(self, a):
         """Return the output of the network if ``a`` is input."""
         for b, w in zip(self.biases, self.weights):
-            a = sigmoid((w@a) +b)
+            a = sigmoid(w@a + b)
         return a
 
     def SGD(self, training_data, epochs, mini_batch_size, eta,
@@ -174,14 +179,12 @@ class Network(object):
 
         for j in range(epochs):
             random.shuffle(training_data)
-            mini_batches = #TODO: Make a list of mini-batches here. Mini-batches should be arrays.
+            mini_batches = [training_data[i, i + mini_batch_size] for i in range(0, n, mini_batch_size)] #TODO: Make a list of mini-batches here. Mini-batches should be arrays.
             
-            for mini_batch in (pbar:= tqdm(mini_batches, disable= not verbose)):
-                # TODO: Update the weights and biases using a single mini batch. Call update_mini_batch.
-                if verbose:
-                    cost = self.total_cost(training_data, lmbda)
-                    pbar.set_description("Cost on training data: {}".format(cost))
-            
+            for mini_batch in mini_batches:
+                #TODO: Update the weights and biases using a single mini batch. Call update_mini_batch.
+                self.update_mini_batch(mini_batch, eta, lmbda, n = mini_batch_size)
+
             # Print the progress of the training
             print("Epoch {} training complete".format(j))
             if monitor_training_cost:
@@ -221,7 +224,7 @@ class Network(object):
         for x, y in mini_batch:
             delta_nabla_b, delta_nabla_w = self.backprop(x, y)
             nabla_b = [nb+dnb for nb, dnb in zip(nabla_b, delta_nabla_b)]
-            nabla_w = #TODO: update weights the same way as biases
+            nabla_w = [nw+dnw for nw, dnw in zip(nabla_w, delta_nabla_w)] #TODO: update weights the same way as biases
         self.weights = [(1-eta*(lmbda/n))*w-(eta/len(mini_batch))*nw
                         for w, nw in zip(self.weights, nabla_w)]
         self.biases = [b-(eta/len(mini_batch))*nb
@@ -239,26 +242,26 @@ class Network(object):
         activations = [x] # list to store all the activations, layer by layer
         zs = [] # list to store all the z vectors (preactivatuib), layer by layer
         for b, w in zip(self.biases, self.weights):
-            z = (w@activation) +b# Next pre actiivation
+            z = w@activations[-1] + b #TODO: Next pre actiivation
             zs.append(z)
-            activation = sigmoid(z)# Next activation
+            activation = sigmoid(z) #TODO: Next activation
             activations.append(activation)
         # backward pass
         delta = self.cost.delta(zs[-1], activations[-1], y) # TODO: Get delta for last layer
-        nabla_b[-1] = delta # TODO: Get bias gradient for last layer
-        nabla_w[-1] = np.matmul(delta, activations[-2].transpose())# TODO: Get weight gradient for last layer
+        nabla_b[-1] = delta# TODO: Get bias gradient for last layer
+        nabla_w[-1] = delta * activations[-2] # TODO: Get weight gradient for last layer
         # Note that the variable l in the loop below is used a little
         # differently to the notation in Chapter 2 of the book.  Here,
         # l = 1 means the last layer of neurons, l = 2 is the
         # second-last layer, and so on.  It's a renumbering of the
         # scheme in the book, used here to take advantage of the fact
         # that Python can use negative indices in lists.
-        for l in range(2, self.num_layers):
-            z = zs[-l]# TODO: Pre activation
+        for l in xrange(2, self.num_layers):
+            z = zs[-l] # TODO: Pre activation
             sp = sigmoid_prime(z)
-            delta = np.dot(self.weights[-l+1].transpose(), delta) * sp# TODO: New gradient
-            nabla_b[-l] = delta#TODO: New bias gradient
-            nabla_w[-l] = np.matmul(delta, activations[-l-1].transpose())# TODO: New weight gradient
+            delta = nabla_w[-l + 1].T @ delta + sp # TODO: New gradient
+            nabla_b[-l] = delta #TODO: New bias gradient
+            nabla_w[-l] = delta * activations[-l - 1] # TODO: New weight gradient
         return (nabla_b, nabla_w)
 
     def accuracy(self, data, convert=False):
@@ -290,7 +293,7 @@ class Network(object):
         else:
             results = [(np.argmax(self.feedforward(x)), y)
                         for (x, y) in data]
-        return sum([int(i==j) for i,j in results]) #TODO: Return the accuracy
+        return sum([a == y for a, y in results]) / len(results) #TODO: Return the accuracy
 
     def total_cost(self, data, lmbda, convert=False):
         """Return the total cost for the data set ``data``.  The flag
@@ -304,7 +307,7 @@ class Network(object):
             a = self.feedforward(x)
             if convert: y = vectorized_result(y)
             cost += self.cost.fn(a, y) # TODO: Add cost for this data point
-        cost += 0.5*(lmbda/len(data))*sum([np.linalg.norm(w)**2 for w in self.weights])# TODO: Add regularization cost
+        cost += .5 * lmbda / len(data) * sum([w.sum() for w in self.weights]) # TODO: Add regularization cost
         return cost
 
     def save(self, filename):
