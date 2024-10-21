@@ -9,8 +9,8 @@
 \usepackage{caption}
 \usepackage{float}
 \usepackage{geometry}
-\usepackage{nicematrix}
-\usepackage{minted}
+% \usepackage{nicematrix}
+% \usepackage{minted}
 
 \geometry{left = 3.18cm, top = 2.54cm, right = 3.18cm}
 
@@ -22,10 +22,41 @@
 \maketitle
 \small
 \section*{Problem 1}
-
+The weights and biases are given by 
+\begin{align*}
+    \mathbf{W}^{(1)} & = \begin{bmatrix}
+        -1 & 1 & 0 & 0 \\
+        0 & -1 & 1 & 0 \\
+        0 & 0 & -1 & 1 \\
+    \end{bmatrix} \\
+    \mathbf{b}^{(1)} & = \begin{bmatrix} 0 & 0 & 0\end{bmatrix} \\
+    \mathbf{W}^{(2)} & = \begin{bmatrix} 1 & 1 & 1 \end{bmatrix} \\
+    b^{(2)} & = -2.4
+\end{align*}
 
 \section*{Problem 2}
-
+The dimensions of $X, Y, W, B$ are as follows (assuming that the number of features is $d$):
+\begin{itemize}
+    \item $X \in \mathbb{R}^{N \times d}$ 
+    \item $Y = [y_1, y_2, \cdots, y_N]^T \in \mathbb{R}^{N\times 1}$
+    \item $W \in \mathbb{R}^{d\times 1}$
+    \item $B \in \mathbb{R}^{N\times 1}$
+\end{itemize}
+With the notations above, we can define $\mathcal{L}(Y ,T)$ as
+$$ \mathcal{L}(Y, T) := [\mathcal{L}(y_1, t_1), \mathcal{L}(y_2, t_2), \cdots, \mathcal{L}(y_N, t_N)]^T 
+\in \mathbb{R}^{N\times 1}$$
+Accoringly, we have that
+$$ \mathcal{E} = \frac{1}{N} \mathcal{L}(Y, T)^T \cdot e^{N\times 1} $$
+and, obviously, 
+$$ Y = XW + B $$
+Therefore, the derivatives are computed as 
+\begin{align*}
+    \frac{\partial \mathcal{E}}{\partial Y} & = \frac{1}{N} \sin(Y - T) \\
+    \frac{\partial \mathcal{E}}{\partial W} & = \frac{\partial \mathcal{E}}{\partial Y} \frac{\partial Y}
+    {\partial W} = \frac{1}{N} X^T \sin(Y - T) \\
+    \frac{\partial \mathcal{E}}{\partial B} & = \frac{\partial \mathcal{E}}{\partial Y} \frac{\partial Y}
+    {\partial B} = \frac{1}{N} \sin(Y - T)
+\end{align*}
 
 \section*{Problem 3}
 
