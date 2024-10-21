@@ -1,2 +1,6 @@
 Lab_3_nn_from_scratch/network2.py
 Lab_3_nn_from_scratch/mnist_exps_pvt.ipynb
+
+# ignore all latex auxiliary and log files
+*.log
+*.aux
