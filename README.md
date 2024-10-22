@@ -5,4 +5,4 @@ Course Material for Machine Learning for Finance II (Math 629) at UMich, Fall 20
 
 **GSI:** [Chinmaya Kausik](https://chinmaya-kausik.github.io/).
 
-We will have instructions for all labs in our [wiki](https://github.com/Chinmaya-Kausik/machine_learning_for_finance_ii/wiki). Please remember to follow along there!
+This repo is forked from our GSI. The homeworks are also here.
