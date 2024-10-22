@@ -81,7 +81,8 @@ class CrossEntropyCost(object):
         consistent with the delta method for other cost classes.
 
         """
-        return -(y/a + (1-y) / (1-a)) * sigmoid_prime(z)
+        # return -(y/a + (1-y) / (1-a)) * sigmoid_prime(z)
+        return a - y
 
 
 #### Main Network class
