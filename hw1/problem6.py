@@ -79,22 +79,22 @@ class LitNet(L.LightningModule):
         X, y = batch
         output = self.model(X)
         loss = self.criterion(output, y)
-        self.log("Training Loss", loss)
+        # self.log("Training Loss", loss)
         return loss
 
-    def test_step(self, batch, batch_idx):
-        # training_step defines the train loop.
-        X, y = batch
-        output = self.model(X)
-        loss = self.criterion(output, y)
-        self.log("Validation Loss", loss)
+    # def validation_step(self, batch, batch_idx):
+    #     # training_step defines the train loop.
+    #     X, y = batch
+    #     output = self.model(X)
+    #     loss = self.criterion(output, y)
+        # self.log("Validation Loss", loss)
 
     def test_step(self, batch, batch_idx):
-        # training_step defines the train loop.
+        # training_step defines the test loop.
         X, y = batch
         output = self.model(X)
         loss = self.criterion(output, y)
-        self.log("Test Loss", loss)
+        # self.log("Test Loss", loss)
 
 
 def correct(output, target):
@@ -174,13 +174,15 @@ def main():
     input_dim = 3 * 32 * 32; hidden_dim = [1024, 512, 256]; output_dim = len(classes); learning_rate = .0001; num_epochs = 200; batch_size = 128; njobs = 32; dropout = .5; optimizer_decay = 1e-4
     train_loader, valid_loader, test_loader = load_data(batch_size, njobs)
 
-    model = Net(input_dim, hidden_dim, output_dim, dropout).to(device)
+    model, model_lit = Net(input_dim, hidden_dim, output_dim, dropout).to(device), Net(input_dim, hidden_dim, output_dim, dropout).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate, weight_decay = optimizer_decay)
 
     print("Hidden dim: {}; lr: {}; batch_size: {}; dropout: {}".format(hidden_dim, learning_rate, batch_size, dropout))
+
+    lit_model = model.cop
     # lit_mlp = LitNet(model, criterion, optimizer)
-    # lit_trainer = L.Trainer(max_epochs = num_epochs)
+    # lit_trainer = L.Trainer(max_epochs = num_epochs, accelerator = "gpu", devices = -1)
     # lit_trainer.fit(lit_mlp, train_loader)
 
     stopper_args = {"threshold": 20, "epsilon": 1e-4}
