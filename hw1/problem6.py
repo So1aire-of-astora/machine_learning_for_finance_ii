@@ -4,10 +4,12 @@ import torch.nn as nn
 from torchvision import datasets
 import torchvision.transforms as transforms
 from matplotlib import pyplot as plt
+import lightning as L
 
 if torch.cuda.is_available():
     # torch.set_default_device("cuda")
     device = torch.device("cuda:0")
+    # device = torch.device("cpu")
 
 def load_data(size, njobs):
     transform = transforms.Compose(
@@ -24,31 +26,84 @@ def load_data(size, njobs):
     # num_workers = ?
 
     # Fill in the options for both data loaders. Warning: the training dataloader should shuffle the data
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size = size, shuffle = True, num_workers = njobs)
-    valid_loader = torch.utils.data.DataLoader(val_set, batch_size = size, shuffle = False, num_workers = njobs)
-    test_loader = torch.utils.data.DataLoader(testset, batch_size = size, shuffle = False, num_workers = njobs)
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size = size, shuffle = True, num_workers = njobs, pin_memory = True)
+    valid_loader = torch.utils.data.DataLoader(val_set, batch_size = size, shuffle = False, num_workers = njobs, pin_memory = True)
+    test_loader = torch.utils.data.DataLoader(testset, batch_size = size, shuffle = False, num_workers = njobs, pin_memory = True)
 
     return train_loader, valid_loader, test_loader
 
+class EarlyStopper:
+    def __init__(self, threshold = float("inf"), epsilon = float("inf")):
+        self.threshold = threshold
+        self.epsilon = epsilon
+        self.counter = 0
+        self.min_valid_loss = float('inf')
+
+    def early_stop(self, valid_loss):
+        if valid_loss < self.min_valid_loss:
+            self.min_valid_loss = valid_loss
+            self.counter = 0
+        elif valid_loss > (self.min_valid_loss + self.epsilon):
+            self.counter += 1
+            if self.counter >= self.threshold:
+                return True
+        return False
+
 class Net(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
+    def __init__(self, input_dim: int, hidden_dims: list, output_dim: int, dropout_rate = 0.):
         super(Net, self).__init__()
-        self.layers = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, output_dim)
-        )
-        
+        layers = [nn.Flatten()]
+        dims = [input_dim] + hidden_dims
+        for i in range(len(dims) - 1):
+            layers.append(nn.Linear(dims[i], dims[i + 1]))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(dropout_rate))
+        layers.append(nn.Linear(dims[-1], output_dim))
+        self.layers = nn.Sequential(*layers)
+
     def forward(self, x):
         return self.layers(x)
 
-def correct(output, target):
-    prediction = output.argmax(1)                            # pick digit with largest network output
-    correct_ones = (prediction == target).type(torch.float)  # 1.0 for correct, 0.0 for incorrect
-    return correct_ones.sum().item()  
+class LitNet(L.LightningModule):
+    def __init__(self, model, criterion, optimizer):
+        super().__init__()
+        self.model = model
+        self.criterion = criterion
+        self.optimizer = optimizer
 
-def train(train_loader, valid_loader, model, criterion, optimizer, epochs):
+    def configure_optimizers(self):
+        return self.optimizer
+
+    def training_step(self, batch, batch_idx):
+        # training_step defines the train loop.
+        X, y = batch
+        output = self.model(X)
+        loss = self.criterion(output, y)
+        self.log("Training Loss", loss)
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        # training_step defines the train loop.
+        X, y = batch
+        output = self.model(X)
+        loss = self.criterion(output, y)
+        self.log("Validation Loss", loss)
+
+    def test_step(self, batch, batch_idx):
+        # training_step defines the train loop.
+        X, y = batch
+        output = self.model(X)
+        loss = self.criterion(output, y)
+        self.log("Test Loss", loss)
+
+
+def correct(output, target):
+    predicted_digits = output.argmax(1)                            # pick digit with largest network output
+    correct_ones = (predicted_digits == target).type(torch.float)  # 1.0 for correct, 0.0 for incorrect
+    return correct_ones.sum().item()    
+
+def train(train_loader, valid_loader, model, criterion, optimizer, epochs, stopper_args):
+    stopper = EarlyStopper(**stopper_args)
     for e in range(epochs):
         model.train()
 
@@ -75,11 +130,13 @@ def train(train_loader, valid_loader, model, criterion, optimizer, epochs):
         
         training_loss = total_loss / num_batches
         accuracy_train = total_correct / num_items
-
-        if not (e+1) % 500:
-            valid_loss, accuracy_valid = test(valid_loader, model, criterion, verbose = 0)
-            print("Epoch %d/%d: Training Loss %.6f\tValidation Loss %.6f\tTraining accuracy %.2f%%\tValidation accuracy %.2f%%" %(e+1, epochs, training_loss, valid_loss, accuracy_train*100, accuracy_valid*100))
-        
+        valid_loss, accuracy_valid = test(valid_loader, model, criterion, verbose = 0)
+        if not (e+1) % 10:
+            print("Epoch %d/%d: Training Loss %.6f\tValidation Loss %.6f\tTraining Accuracy %.2f%%\tValidation Accuracy %.2f%%" %(e+1, epochs, training_loss, valid_loss, accuracy_train*100, accuracy_valid*100))
+        if stopper.early_stop(valid_loss):
+            print("[Early stopping]\nEpoch %d/%d: Training Loss %.6f\tValidation Loss %.6f\tTraining Accuracy %.2f%%\tValidation Accuracy %.2f%%" %(e+1, epochs, training_loss, valid_loss, 
+                                                                                                                                                    accuracy_train*100, accuracy_valid*100))
+            break       
 
 
 def test(test_loader, model, criterion, verbose = 1):
@@ -111,16 +168,23 @@ def test(test_loader, model, criterion, verbose = 1):
     print("Test Loss %.6f\tTest Accuracy %.2f%%" %(test_loss, accuracy*100))
 
 
+
 def main():
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-    input_dim = 3 * 32 * 32; hidden_dim = 50; output_dim = len(classes); learning_rate = .01; num_epochs = 10000; batch_size = 64; njobs = 32
+    input_dim = 3 * 32 * 32; hidden_dim = [1024, 512, 256]; output_dim = len(classes); learning_rate = .0001; num_epochs = 200; batch_size = 128; njobs = 32; dropout = .5; optimizer_decay = 1e-4
     train_loader, valid_loader, test_loader = load_data(batch_size, njobs)
-    
-    model = Net(input_dim, hidden_dim, output_dim).to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.RMSprop(model.parameters(), lr = learning_rate)
 
-    train(train_loader, valid_loader, model, criterion, optimizer, num_epochs)
+    model = Net(input_dim, hidden_dim, output_dim, dropout).to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate, weight_decay = optimizer_decay)
+
+    print("Hidden dim: {}; lr: {}; batch_size: {}; dropout: {}".format(hidden_dim, learning_rate, batch_size, dropout))
+    # lit_mlp = LitNet(model, criterion, optimizer)
+    # lit_trainer = L.Trainer(max_epochs = num_epochs)
+    # lit_trainer.fit(lit_mlp, train_loader)
+
+    stopper_args = {"threshold": 20, "epsilon": 1e-4}
+    train(train_loader, valid_loader, model, criterion, optimizer, num_epochs, stopper_args)
     test(test_loader, model, criterion)
 
 

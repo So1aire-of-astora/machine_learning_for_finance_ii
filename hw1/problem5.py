@@ -24,7 +24,7 @@ def load_data(num_samples, num_features):
     )
 
 class EarlyStopper:
-    def __init__(self, threshold, epsilon = 0):
+    def __init__(self, threshold = float("inf"), epsilon = float("inf")):
         self.threshold = threshold
         self.epsilon = epsilon
         self.counter = 0
@@ -94,9 +94,24 @@ class NeuralNetwork:
         self.W2 -= learning_rate / N * delta_W2 # update of the 2nd weight matrix
         self.b2 -= learning_rate / N * delta_b2 # update of the 2nd bias vector
 
-        
-    def train(self, X_train, y_train, X_valid, y_valid, epochs, learning_rate):
-        stopper = EarlyStopper(threshold = 25, epsilon = 1e-4)
+    
+    def score(self, y, y_pred, pct = True):
+        # y_pred = (self.forward(X) > .5).float()
+        return (1 - ((y_pred > .5).float() - y.unsqueeze(1)).abs().mean(axis = 0)).item() * (100**pct)
+
+    def metrics(self, y, y_pred, pct = True):
+        diff = 2 * (y.unsqueeze(1) + 1) - (y_pred > .5).float()
+        FP = torch.sum(diff == 1.).item()
+        TN = torch.sum(diff == 2.).item()
+        TP = torch.sum(diff == 3.).item()
+        FN = torch.sum(diff == 4.).item()
+        precision = TP / (TP + FP) * (100**pct)
+        recall = TP / (TP + FN) * (100**pct)
+        f1 = 2 * precision * recall / (precision + recall)
+        return precision, recall, f1
+
+    def train(self, X_train, y_train, X_valid, y_valid, epochs, learning_rate, stopper_args = None, verbose = 1):
+        stopper = EarlyStopper(**stopper_args)
         for e in range(epochs):
             xe_loss = lambda y, y_pred: -torch.mean(torch.mul(torch.log(y_pred), y.unsqueeze(1)) + torch.mul(torch.log(1 - y_pred),  (1 - y.unsqueeze(1)))) # fill in the question marks 
 
@@ -108,23 +123,20 @@ class NeuralNetwork:
             y_valid_pred = torch.clamp(self.forward(X_valid), 1e-7, 1 - 1e-7)
             valid_loss = xe_loss(y_valid, y_valid_pred)
             
-            
             # self.W1 -= # update of the 1st weight matrix
             # self.b1 -= # update of the 1st bias vector
             # self.W2 -= # update of the 2nd weight matrix
             # self.b2 -= # update of the 2nd bias vector
-            accuracy_train = self.score(X_train, y_train)
-            accuracy_valid = self.score(X_valid, y_valid)
+            accuracy_train = self.score(y_train, y_train_pred)
+            accuracy_valid = self.score(y_valid, y_valid_pred)
             if not (e+1) % 1000:
-                print("Epoch %d/%d: Training Loss %.6f\tValidation Loss %.6f\tTraining accuracy %.4f\tValidation accuracy %.4f" %(e+1, epochs, training_loss, valid_loss, accuracy_train, accuracy_valid))
+                print("Epoch %d/%d: Training Loss %.6f\tValidation Loss %.6f\tTraining accuracy %.2f%%\tValidation accuracy %.2f%%" %(e+1, epochs, training_loss, valid_loss, accuracy_train, accuracy_valid))
+                if verbose > 1:
+                    print("Precision %.2f%%\tRecall %.2f%%\tF1 Score %.6f" %self.metrics(y_train, y_train_pred))
             if stopper.early_stop(valid_loss):
                 print("[Early stopping]\nEpoch %d/%d: Training Loss %.6f\tValidation Loss %.6f\tTraining accuracy %.2f%%\tValidation accuracy %.2f%%" %(e+1, epochs, training_loss, valid_loss, 
-                                                                                                                                                    accuracy_train*100, accuracy_valid*100))
+                                                                                                                                                    accuracy_train, accuracy_valid))
                 break
-    
-    def score(self, X, y):
-        y_pred = (self.forward(X) > .5).float()
-        return (1 - (y_pred - y.unsqueeze(1)).abs().mean(axis = 0)).item()
 
 
 def main():
@@ -145,8 +157,10 @@ def main():
         y_train_torch,
         X_valid_torch,
         y_valid_torch,
-        epochs = 100000,
-        learning_rate = 0.1
+        epochs = 200000,
+        learning_rate = 0.2,
+        verbose = 2,
+        stopper_args = {"threshold": 10, "epsilon": 0}
     )
 
 if __name__ == "__main__":
