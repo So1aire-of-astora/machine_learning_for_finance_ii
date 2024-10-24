@@ -110,7 +110,15 @@ class NeuralNetwork:
         f1 = 2 * precision * recall / (precision + recall)
         return precision, recall, f1
 
-    def train(self, X_train, y_train, X_valid, y_valid, epochs, learning_rate, stopper_args = None, verbose = 1):
+    def train_log(self, y_train, y_train_pred, y_valid, y_valid_pred, train_loss, valid_loss, curr_epoch, max_epoch, verbose):
+        accuracy_train = self.score(y_train, y_train_pred)
+        accuracy_valid = self.score(y_valid, y_valid_pred)
+        if verbose: 
+            print("Epoch %d/%d: Training Loss %.6f\tValidation Loss %.6f\tTraining accuracy %.2f%%\tValidation accuracy %.2f%%" %(curr_epoch, max_epoch, train_loss, valid_loss, accuracy_train, accuracy_valid))
+        if verbose > 1:
+            print("Precision %.2f%%\tRecall %.2f%%\tF1 Score %.6f" %self.metrics(y_train, y_train_pred))
+
+    def train(self, X_train, y_train, X_valid, y_valid, epochs, learning_rate, stopper_args = None, verbose = 1, print_interval = 1000):
         stopper = EarlyStopper(**stopper_args)
         for e in range(epochs):
             xe_loss = lambda y, y_pred: -torch.mean(torch.mul(torch.log(y_pred), y.unsqueeze(1)) + torch.mul(torch.log(1 - y_pred),  (1 - y.unsqueeze(1)))) # fill in the question marks 
@@ -127,15 +135,12 @@ class NeuralNetwork:
             # self.b1 -= # update of the 1st bias vector
             # self.W2 -= # update of the 2nd weight matrix
             # self.b2 -= # update of the 2nd bias vector
-            accuracy_train = self.score(y_train, y_train_pred)
-            accuracy_valid = self.score(y_valid, y_valid_pred)
-            if not (e+1) % 1000:
-                print("Epoch %d/%d: Training Loss %.6f\tValidation Loss %.6f\tTraining accuracy %.2f%%\tValidation accuracy %.2f%%" %(e+1, epochs, training_loss, valid_loss, accuracy_train, accuracy_valid))
-                if verbose > 1:
-                    print("Precision %.2f%%\tRecall %.2f%%\tF1 Score %.6f" %self.metrics(y_train, y_train_pred))
+
+            if not (e+1) % print_interval:
+                self.train_log(y_train, y_train_pred, y_valid, y_valid_pred, training_loss, valid_loss, e+1, epochs, verbose)
             if stopper.early_stop(valid_loss):
-                print("[Early stopping]\nEpoch %d/%d: Training Loss %.6f\tValidation Loss %.6f\tTraining accuracy %.2f%%\tValidation accuracy %.2f%%" %(e+1, epochs, training_loss, valid_loss, 
-                                                                                                                                                    accuracy_train, accuracy_valid))
+                print("[Early stopping]")
+                self.train_log(y_train, y_train_pred, y_valid, y_valid_pred, training_loss, valid_loss, e+1, epochs, verbose)
                 break
 
 
@@ -160,6 +165,7 @@ def main():
         epochs = 200000,
         learning_rate = 0.2,
         verbose = 2,
+        print_interval = 20000,
         stopper_args = {"threshold": 10, "epsilon": 0}
     )
 
