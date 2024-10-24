@@ -5,6 +5,7 @@ from torchvision import datasets
 import torchvision.transforms as transforms
 from matplotlib import pyplot as plt
 import lightning as L
+from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 
 if torch.cuda.is_available():
     # torch.set_default_device("cuda")
@@ -64,37 +65,36 @@ class Net(nn.Module):
     def forward(self, x):
         return self.layers(x)
 
-class LitNet(L.LightningModule):
-    def __init__(self, model, criterion, optimizer):
-        super().__init__()
-        self.model = model
-        self.criterion = criterion
-        self.optimizer = optimizer
+# class LitNet(L.LightningModule):
+#     def __init__(self, model, criterion, optimizer):
+#         super().__init__()
+#         self.model = model
+#         self.criterion = criterion
+#         self.optimizer = optimizer
 
-    def configure_optimizers(self):
-        return self.optimizer
+#     def configure_optimizers(self):
+#         return self.optimizer
 
-    def training_step(self, batch, batch_idx):
-        # training_step defines the train loop.
-        X, y = batch
-        output = self.model(X)
-        loss = self.criterion(output, y)
-        # self.log("Training Loss", loss)
-        return loss
+#     def training_step(self, batch, batch_idx):
+#         X, y = batch
+#         output = self.model(X)
+#         loss = self.criterion(output, y)
+#         self.log("Training Loss", loss)
+#         return loss
 
-    # def validation_step(self, batch, batch_idx):
-    #     # training_step defines the train loop.
-    #     X, y = batch
-    #     output = self.model(X)
-    #     loss = self.criterion(output, y)
-        # self.log("Validation Loss", loss)
+#     def validation_step(self, batch, batch_idx):
+#         X, y = batch
+#         output = self.model(X)
+#         loss = self.criterion(output, y)
+#         self.log("Validation Loss", loss)
+#         return loss
 
-    def test_step(self, batch, batch_idx):
-        # training_step defines the test loop.
-        X, y = batch
-        output = self.model(X)
-        loss = self.criterion(output, y)
-        # self.log("Test Loss", loss)
+#     def test_step(self, batch, batch_idx):
+#         X, y = batch
+#         output = self.model(X)
+#         loss = self.criterion(output, y)
+#         self.log("Test Loss", loss)
+#         return loss
 
 
 def correct(output, target):
@@ -172,6 +172,7 @@ def test(test_loader, model, criterion, verbose = 1):
 def main():
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
     input_dim = 3 * 32 * 32; hidden_dim = [1024, 512, 256]; output_dim = len(classes); learning_rate = .0001; num_epochs = 200; batch_size = 128; njobs = 32; dropout = .5; optimizer_decay = 1e-4
+    stopper_args = {"threshold": 20, "epsilon": 1e-4}
     train_loader, valid_loader, test_loader = load_data(batch_size, njobs)
 
     model, model_lit = Net(input_dim, hidden_dim, output_dim, dropout).to(device), Net(input_dim, hidden_dim, output_dim, dropout).to(device)
@@ -180,12 +181,11 @@ def main():
 
     print("Hidden dim: {}; lr: {}; batch_size: {}; dropout: {}".format(hidden_dim, learning_rate, batch_size, dropout))
 
-    lit_model = model.cop
-    # lit_mlp = LitNet(model, criterion, optimizer)
-    # lit_trainer = L.Trainer(max_epochs = num_epochs, accelerator = "gpu", devices = -1)
+    # lit_mlp = LitNet(model_lit, criterion, optimizer)
+    # lit_stopper = EarlyStopping(monitor = "Validation Loss", min_delta = stopper_args["epsilon"], patience = stopper_args["threshold"], verbose = False, mode = "min")
+    # lit_trainer = L.Trainer(max_epochs = num_epochs, accelerator = "gpu", devices = -1, callbacks = [lit_stopper])
     # lit_trainer.fit(lit_mlp, train_loader)
 
-    stopper_args = {"threshold": 20, "epsilon": 1e-4}
     train(train_loader, valid_loader, model, criterion, optimizer, num_epochs, stopper_args)
     test(test_loader, model, criterion)
 
