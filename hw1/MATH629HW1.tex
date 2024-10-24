@@ -59,10 +59,25 @@ Therefore, the derivatives are computed as
 \end{align*}
 
 \section*{Problem 3}
+We start with showing that the absolute loss is indeed a squared loss with reassigned weights.
+\begin{equation}
+    \sum_{n = 1}^N \vert y_n - \mathbf{X_n}\beta \vert = \sum_{n = 1}^N \frac{1}{ \vert y_n - \mathbf{X_n}\beta \vert}
+    (y_n - \mathbf{X_n}\beta)^2 =: \sum_{n = 1}^N s_n(y_n - \mathbf{X_n}\beta)^2
+\end{equation}
+In order to estimate the $s_n$'s, we can utilize the following algorithm:
+\begin{itemize}
+    \item Initialize OLS weights, $\beta^0$
+    \item Compute residuals $\vert y_n - \mathbf{X_n}\beta \vert$
+    \item Update weights $w^i_n$ with $w^i_n = \frac{1}{\vert y_n - \mathbf{X_n}\beta \vert}$
+    \item Solve the WLS problem, $\beta^{i+1} = \mathrm{argmin}\sum_n w^i_n(y_n - X_n\beta^i)$
+    \item Stop when $\vert \beta^{i+1} - \beta^i \vert < \epsilon$, where $\epsilon$ is a pre-determined threshold.
+\end{itemize}
 
 \section*{Problem 4}
-
-
-\section*{Appendix}
+\begin{figure}[H]
+    \centering
+    \caption{Implementation of XOR}
+    \includegraphics[width = .6\linewidth]{~/U-M/MATH629/machine_learning_for_finance_ii/hw1/pic/hw1_1.png}
+\end{figure}
 
 \end{document}
