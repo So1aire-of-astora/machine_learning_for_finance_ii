@@ -17,7 +17,7 @@ def load_data(path):
 class Model:
     def __init__(self, data, params):
         self.params = params
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(data.iloc[:,:-1].to_numpy(), 
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(data.iloc[:,:-1].to_numpy().astype(float), 
                                                                                 self.transform_label(data["Label"]),
                                                                                 test_size = self.params["test_size"],
                                                                                 random_state = self.params["random_state"])
@@ -69,15 +69,17 @@ class Baseline(Model):
         self.model = GridSearchCV(estimator = lr, param_grid = self.params["lr_grid"], cv = 5)
         self.model.fit(self.X_train, self.y_train)
 
-class MLP(Model, nn.Module):
+class MLP(nn.Module, Model):
     def __init__(self, data, params, mlp_params):
-        super(MLP, self).__init__(data, params)
+        super(MLP, self).__init__()
+        Model.__init__(self, data, params)
         self.mlp_params = mlp_params
-        layers = []
+        layers = [nn.Flatten()]
         prev_size = mlp_params["input_size"]
         for size in mlp_params["hidden_size"]:
             layers.append(nn.Linear(prev_size, size))
             layers.append(nn.ReLU())
+            layers.append(nn.Dropout(p = self.mlp_params["dropout"]))
             prev_size = size
         layers.append(nn.Linear(prev_size, mlp_params["output_size"]))
         self.layers = nn.Sequential(*layers)
@@ -87,28 +89,28 @@ class MLP(Model, nn.Module):
     
     @staticmethod
     def correct(y, y_pred):
-        predicted_digits = y.argmax(1)
-        correct_ones = (predicted_digits == y_pred).type(torch.float)
+        prediction = y_pred.argmax(1)
+        correct_ones = (y == prediction).type(torch.float)
         return correct_ones.sum().item()
     
-    def fit(self, criterion, optimizer, epochs):
+    def fit(self, criterion, optimizer):
         self.train()
-        X_train_tensor = torch.tensor(self.X_train, dtype = torch.float32)
-        y_train_tensor = torch.tensor(self.y_train, dtype = torch.long)
+        X_train_tensor = torch.from_numpy(self.X_train).to(torch.float32)
+        y_train_tensor = torch.from_numpy(self.y_train)      
         train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
         train_loader = DataLoader(train_dataset, batch_size = self.mlp_params["batch_size"], shuffle = True)
 
         num_batches = len(train_loader)
         num_items = len(train_loader.dataset)
 
-        for e in range(epochs):
+        for e in range(epochs := self.mlp_params["epochs"]):
             total_loss = 0.0
             total_correct = 0
             
             for X, y in train_loader:
                 optimizer.zero_grad()
                 pred = self(X)
-                loss = criterion(y, pred)
+                loss = criterion(pred, y)
                 loss.backward()
                 optimizer.step()
                 total_loss += loss
@@ -116,7 +118,8 @@ class MLP(Model, nn.Module):
             
             training_loss = total_loss / num_batches
             accuracy = total_correct / num_items
-            print("Epoch %d/%d: Training Loss: %.4fAccuracy: %.4f" %(e+1, epochs, training_loss, accuracy*100))
+            if not (e + 1) % 100:
+                print("Epoch %d/%d\tTraining Loss %.4f\tAccuracy %.4f" %(e+1, epochs, training_loss, accuracy*100))
 
     def test(self, criterion):
         self.eval()
@@ -135,7 +138,7 @@ class MLP(Model, nn.Module):
 
                 pred = self(X)
 
-                loss = criterion(y, pred)
+                loss = criterion(pred, y)
                 test_loss += loss
 
                 total_correct += self.correct(y, pred)
@@ -145,12 +148,20 @@ class MLP(Model, nn.Module):
 
 def main():
     data = load_data("./midterm/data_classification.csv")
-    lr_model = Baseline(data, params = {"test_size": .3, "random_state": 42, "encoding": "numeric", 
-                                        "lr_grid": {'C': [0.01, 0.1, 1, 10, 100],
-                                                    'solver': ['lbfgs', 'saga'],
-                                                    'max_iter': [100, 500, 1000]}})
-    lr_model.fit()
-    lr_model.evaluate()
+    # lr_model = Baseline(data, params = {"test_size": .3, "random_state": 42, "encoding": "numeric", 
+                                        # "lr_grid": {'C': [0.01, 0.1, 1, 10, 100],
+                                        #             'solver': ['lbfgs', 'saga'],
+                                        #             'max_iter': [100, 500, 1000]}})
+    # lr_model.fit()
+    # lr_model.evaluate()
+
+    mlp = MLP(data, params = {"test_size": .3, "random_state": 42, "encoding": "numeric"}, mlp_params = {
+        "input_size": 2, "hidden_size": [64, 32], "output_size": 5, "batch_size": 128, "dropout": .3, 
+        "epochs": 1000, "lr": .001})
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(params = mlp.parameters(), lr = mlp.mlp_params["lr"])
+    mlp.fit(criterion, optimizer)
+    mlp.test(criterion)
 
 
 if __name__ == "__main__":
